@@ -1,0 +1,640 @@
+---
+title: "Classification of Poisonous Mushrooms"
+author: "Zeynep Afra Sezer - Beste Ünal"
+output: pdf_document
+---
+
+This dataset is a cleaned up version of the original Mushroom Dataset to identify which features are most indicative of a poisonous mushroom. The Mushroom Dataset includes 8124 mushrooms of various species, both edible and poisonous. The data consists of attributes such as class, hat shape, hat surface, hat color, bruises, odor, gill attachment, gill spacing, gill size, gill color, stem shape, stem root, above-ring stem surface, below-ring stem surface, above-ring stem color, below-ring stem color, cover type, cover color, number of rings, ring type, spore print color, population, habitat. 
+
+
+In the dataset we are interested in, the Mushroom Dataset, we used Modal imputation to fill in missing data and one-shot coding to represent categorical data in binary form. Thus, each categorical value is transformed into a set of binary variables where the corresponding category is 1 and all others are 0. The data were then cleaned using various techniques such as z-score normalization to scale the mean to 0 and standard deviation to 1, and feature selection to improve the performance of the model and make it run faster.
+
+## Packages
+```{r, message=FALSE, warning=FALSE}
+
+install.packages("DALEX")
+install.packages("caret")
+install.packages("ROCR")
+install.packages("readr")
+install.packages("yardstick")
+install.packages("rsample") #helps us splitting the dataset.
+install.packages("tidymodels") # it helps us training models.
+install.packages("parsnip") # for model fitting
+install.packages("tune") # for model tuning
+ 
+library(DALEX)
+library(caret)
+library(ROCR)
+library(readr)
+library(yardstick)
+library(rsample)
+library(tidymodels)
+library(parsnip)
+library(tune)
+```
+
+The data set is a csv file, so we can use readr package to import the data set. After that, we can assign the data set as "mushroom".
+```{r, message=FALSE, warning=FALSE}
+mushroom <- read_csv("mushroom_cleaned.csv")
+str(mushroom)
+```
+The Mushroom data set consists of 54,035 observations and 9 variables. The variables and their contents are as follows: 
+
+1. cap-diameter: Diameter of the cork cap
+2. cap-shape: Mushroom cap shape 
+3. gill-attachment: Attachment of the lamellae (thin leaves of the cork) to the cork 
+4. gill-color: Color of the lamellae 
+5. stem-height: Height of the mushroom stem 
+6. stem-width: Width of the mushroom stem 
+7. stem-color: Color of the mushroom stem 
+8. season: Season. 
+9. class: Mushroom class 
+The Target Class contains two values - 0 or 1 - where 0 refers to edible and 1 refers to poisonous.
+
+The dataset contains various physical properties of mushrooms and the enumerated values of these properties. These numbers represent specific properties for each mushroom sample in the dataset. In this dataset, our target variable is class, because we want to predict whether the mushrooms are poisonous or not.
+
+
+```{r, message=FALSE, warning=FALSE}
+mushroom <- na.exclude(mushroom) #First, we have to exclude all the NA’s on the data set. 
+```
+
+### Splitting the Data set
+We have to split the data set to compute target variable. We have to split the data set as a two subset by using "sample()" function. Let's allocate 80% of the dataset as the training set and the rest will be the test set.
+
+```{r, message=FALSE, warning=FALSE}
+set.seed(123)
+mushroom_split <- initial_split(data = mushroom, # dataset to split
+                                  prop = 0.80)    # proportion of train set
+
+mushroom_train <- mushroom_split |> training()
+mushroom_test  <- mushroom_split |> testing()
+```
+
+## 1.Logistic Regression
+
+ In this section we build our model using the "glm()" function. First, we need to write the model formula, which is the target variable (class), and the properties as a '.'. Second, we use the training model we specified in the previous section. Finally, we add the family distribution of the target variable. We are interested in binary logistic regression with only two outcomes, so we should set it to 'binomial'.
+
+
+```{r, message=FALSE, warning=FALSE}
+lr_model <- glm(class ~., data = mushroom_train, family = "binomial")
+lr_model
+```
+
+ According to the model, attributes such as stem height, cap shape and stem color appear to be important in the logistic regression. However, the positive intercept value suggests that it may not be an important attribute to consider in classification.
+ 
+In addition, we can say that our model runs on a total of 43227 data points and estimates 8 parameters. The null bias indicates that the model tries to fit the data using only the intercept term, while the residual bias shows how well the model actually fits the data. The AIC value balances the fit and complexity of the model, in this case 54990 indicates that the model fits well but has a certain level of complexity.
+
+```{r, message=FALSE, warning=FALSE}
+summary(lr_model) #to see the output in detail
+```
+
+When we look at the results:
+
+Null Deviance: Indicates how well the model explains the data when only the intercept is included. A value of 59479 represents the amount of variance explained by the intercept alone. Lower null deviance values generally indicate a better fit of the model to the data.
+
+Residual Deviance: Indicates how well the model fits the actual data after considering the independent variables. A value of 54971 indicates that the model fits the data well.
+
+AIC (Akaike Information Criterion): Balances the model's goodness of fit with its complexity. Lower AIC values indicate a better fit with less complexity. A value of 54989 suggests that the model is fitting well but has a certain level of complexity.
+
+In summary, these values help evaluate how well your model fits the data and its complexity. Lower deviance values and AIC indicate better model performance.
+
+
+
+### Model Performance:
+
+ We can check the model performance of the model on test set. For model performance, we have to compute the predicted value of target variable on test set. We should not for get to exclude the target variable on test set. Predicting the values, we can check the first six values using "head()" function.
+ 
+```{r, message=FALSE, warning=FALSE}
+predicted_probs <- predict(lr_model,mushroom_test[,-9], type= "response")
+head(predicted_probs)
+```
+
+ We should transform these probabilities to classes by using "ifelse()" function. We set the condition like that: If there is greater than 0.5, it means “1”. If it is smaller than 0.05, it assigned “0”.
+```{r, message=FALSE, warning=FALSE}
+predicted_classes <- ifelse(predicted_probs > 0.5, 1, 0)
+head(predicted_classes)
+```
+
+We can create confusion matrix using the metrics. We assign the positive and negative classes as a 1 and 0.
+
+### Confusion Matrix:
+```{r, message=FALSE, warning=FALSE}
+confusionMatrix(table(ifelse(mushroom_test$class == "1", "1", "0"),
+                      predicted_classes),
+                positive = "1")
+```
+
+
+The overall accuracy of the model is 63.73%, meaning that it correctly classified 63.73% of the instances. The model correctly identifies 65.22% of the actual poisonous mushrooms. The model correctly identifies 61.57% of the actual non-poisonous mushrooms. When the model predicts a mushroom as poisonous, it is correct 71.03% of the time. When the model predicts a mushroom as non-poisonous, it is correct 55.07% of the time. 
+
+Balanced Accuracy: 0.6340. The average of sensitivity and specificity, providing a balanced measure of model performance.
+
+
+
+## 2.Decision Tree
+
+We need some packages for the decision tree.
+```{r, message=FALSE, warning=FALSE}
+install.packages("rpart.plot") # it helps us visualizing the decision tree.
+install.packages("recipes")
+
+library(recipes)
+library(rpart.plot)
+```
+
+
+The purpose of decision trees is to partition the trained data into homogeneous subgroups. Furthermore, decision trees are often used to model non-linear relationships.  They break down features in detail by dividing them into small parts. 
+
+Step 1- Defining model specification:
+```{r, message=FALSE, warning=FALSE}
+dt_model <- decision_tree() |>
+  set_engine("rpart") |>
+  set_mode("classification")
+```
+
+Step 2- Model training:
+```{r, message=FALSE, warning=FALSE}
+mushroom_train$class <- as.factor(mushroom_train$class)
+
+dt_mushroom <- dt_model |>
+ fit(class ~., data = mushroom_train)
+dt_mushroom
+```
+
+We created and trained a decision tree classification model called dt_mushroom, which will be used to classify mushroom species based on data from the mushroom_train dataset.
+
+
+Step 3- Visualizing the decision tree:
+
+Now let's visualize our decision tree using the "rpart" function.
+```{r, message=FALSE, warning=FALSE}
+rpart.plot(dt_mushroom$fit)
+```
+
+In the decision tree structure, it starts with the root at the beginning and branches out the following parts in turn. Here we can also see the features in the dataset and how which feature was obtained. We can say that the root node is called cp at the top and is the starting point of the decision tree. The next node is called an internal/sub-node. Branches help to connect these nodes together. Finally, the last nodes are called leaf/terminal nodes and they are the endpoints of the decision tree.
+
+
+```{r, message=FALSE, warning=FALSE}
+mushrom_predictions <- dt_mushroom|>
+ predict(new_data = mushroom_test)
+ mushrom_predictions
+```
+
+A vector called mushrom_predictions was created, which contains the classification predictions made for each sample in the mushroom_test dataset. These predictions will be used to evaluate the performance of the model on the test dataset.
+
+```{r, message=FALSE, warning=FALSE}
+dt_mushroom |>
+ predict(new_data = mushroom_test,
+ type = "prob")
+```
+
+This code will return a probability value for each class for each test instance. For example, if there are two classes and the probabilities for a sample are 0.3 and 0.7, the probability that this sample belongs to the first class is 0.3 and the probability that it belongs to the second class is 0.7. Such outputs are important for assessing how reliable the predictions of the classification model are.
+
+Step 4- Evaluating model performance:
+```{r, message=FALSE, warning=FALSE}
+mushroom_results <- tibble(predicted = mushrom_predictions$.pred_class,
+                             actual = mushroom_test$class)
+```
+
+
+Both columns must be of factor type. 
+```{r, message=FALSE, warning=FALSE}
+mushroom_results$actual <- as.factor(mushroom_results$actual)
+mushroom_results$predicted <- as.factor(mushroom_results$predicted)
+
+mushroom_results|> conf_mat(truth = actual, estimate = predicted)
+```
+
+The True Negatives (TN) value indicates that there were 3423 samples that the model correctly predicted as 0 (edible). False Positives (FP) value indicates that there were 1520 samples that the model predicted as 1 (poisonous) but were actually 0 (edible). False Negatives (FN) value indicates that there were 971 samples that the model predicted 0 (edible) but were actually 1 (poisonous).  The True Positives (TP) value indicates that there were 4893 instances where the model correctly predicted 1 (poisonous).
+
+
+```{r, message=FALSE, warning=FALSE}
+ mushroom_results |> accuracy(truth = actual, estimate = predicted)
+```
+
+```{r, message=FALSE, warning=FALSE}
+mushroom_results |> sens(truth = actual, estimate = predicted)
+```
+
+```{r, message=FALSE, warning=FALSE}
+mushroom_results |> spec(truth = actual, estimate = predicted)
+```
+
+The accuracy of this model is about 77%. For this value we can say that the model predicts mostly correctly. Sensitivity; the model correctly predicts the positive class (1: poisonous) about 83% of the time, indicating that the model is quite good at detecting the positive class.  Specificity; the model correctly predicts the negative class (0: edible) at 69%, indicating that the model is slightly less successful in detecting the negative class. The positive predictive value is about 76% of the model's positive predictions are correct, indicating that the model's positive predictions are mostly correct.
+
+We can say that the model has the ability to predict the positive class well and its overall accuracy is quite high. However, the rate of detecting the negative class is slightly lower. This means that the number of false positives is high.
+
+
+### Imbalance Control Interpretation
+
+Here, we use the “bal_accuracy” function in the “yardstick” package to calculate the balanced accuracy metric. This metric is used to evaluate the performance of classification models, while providing more reliable results when there is class imbalance. Balance-corrected accuracy is calculated. This metric evaluates the accuracy of the model considering the imbalance between classes. It can be used for more balanced classification results.
+
+```{r, message=FALSE, warning=FALSE}
+mushroom_results |> bal_accuracy(truth = actual, estimate = predicted)
+```
+
+Balanced accuracy takes a value between 0 and 1, the closer to 1 the better the model performs. In this case, a value of 0.76 indicates that the model performs quite well when class imbalance is taken into account.
+
+
+
+### HYPERPARAMETER ADJUSTMENT IN DECISION TREE MODELS
+
+ A hyperparameter helps us to find the most appropriate model. 
+For a decision tree model, hyperparameters can include values such as maximum depth, minimum sampling fraction, maximum number of features and Decoupling criterion.
+These hyperparameters affect the complexity and generalization ability of the model. Well-tuned hyperparameters can help the model perform better and generalize better.
+
+
+ -minsplit: This hyperparameter determines the minimum number of observations required to split a node. If the number of observations in a node is below this value, the node is not split. This can help reduce the risk of overfitting.
+
+ -minbucket: Sets the minimum number of observations required for a leaf node to be created. If a node has a number of observations below this value, it becomes a leaf and the split stops.
+ 
+ -max depth: This hyperparameter determines the maximum depth of the decision tree. The tree stops growing when it reaches the specified maximum depth or when an unseen node remains. This can help prevent overfitting of the model.
+
+ - cp: This hyperparameter is an important parameter that controls the complexity of the decision tree. High cp values lead to simpler tree structures and fewer branching nodes. This can help prevent overfitting and make generalization better.
+ 
+ 
+
+### Training a vanilla decision tree
+
+ The vanilla decision tree is a decision tree in the simplest form, usually created without the use of any hyperparameter settings or complex optimization techniques. This is based on the direct adaptation of the model to the data set and making decisions based on the values of the characteristics.
+
+
+```{r, message=FALSE, warning=FALSE}
+vanilla_dt <- rpart( class ~ .,
+ data = mushroom_train,
+ method = "class")
+ rpart.plot(vanilla_dt)
+```
+
+
+Training a less deeper decision tree by tuning cp
+
+```{r, message=FALSE, warning=FALSE}
+less_dt1 <- rpart(class ~ .,
+ data = mushroom_train,
+ method = "class",
+ cp = 0.015)
+ rpart.plot(less_dt1)
+```
+
+
+Compare the performance of the vanilla dt and less deeper dt1
+
+```{r, message=FALSE, warning=FALSE}
+mushroom_test$class <- as.factor(mushroom_test$class)
+
+# performance metrics of the vanilla dt
+ vanilla_preds <- predict(vanilla_dt, mushroom_test, type = "class")
+ confusionMatrix(vanilla_preds,
+ mushroom_test$class,
+ positive = "1")
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+ # performance metrics of the less deeper dt
+ less_preds1 <- predict(less_dt1, mushroom_test, type = "class")
+ confusionMatrix(less_preds1,
+mushroom_test$class,
+ positive = "1")
+```
+
+
+Training a less deeper decision tree by tuning minsplit
+
+```{r, message=FALSE, warning=FALSE}
+ less_dt2 <- rpart(class ~ .,
+ data = mushroom_train,
+ method = "class",
+ minsplit = 30)
+ rpart.plot(less_dt2)
+```
+
+
+ Compare the performance of the vanilla dt and less deeper dt2
+ 
+```{r, message=FALSE, warning=FALSE}
+# performance metrics of the vanilla dt
+ confusionMatrix(vanilla_preds,
+ mushroom_test$class,
+ positive = "1")
+```
+ 
+ 
+```{r, message=FALSE, warning=FALSE}
+# performance metrics of the less deeper dt2
+ less_preds2 <- predict(less_dt2, mushroom_test, type = "class")
+ confusionMatrix(less_preds2,
+ mushroom_test$class,
+ positive = "1")
+```
+
+
+Training a deeper decision tree by tuning cp
+
+```{r, message=FALSE, warning=FALSE}
+deeper_dt <- rpart(class ~ .,
+ data = mushroom_train,
+ method = "class",
+ cp = 0.001)
+ rpart.plot(deeper_dt)
+```
+
+
+Compare the performance of the vanilla dt, less deeper dt2, deeper tree
+
+```{r, message=FALSE, warning=FALSE}
+# performance metrics of the vanilla dt
+ confusionMatrix(vanilla_preds,
+ mushroom_test$class,
+ positive = "1")
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+# performance metrics of the less deeper dt2
+ confusionMatrix(less_preds2,
+ mushroom_test$class,
+ positive = "1")
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+# performance metrics of the deeper tree
+ deeper_preds <- predict(deeper_dt, mushroom_test, type = "class")
+ confusionMatrix(deeper_preds,
+ mushroom_test$class,
+ positive = "1")
+```
+
+
+
+
+
+
+## 3.Bagging Trees
+
+Bagging is an ensemble method that combines many decision trees together to create a more powerful model. First, let's install the randomForest package, which is a suitable package for building a bagging model.
+
+```{r, message=FALSE, warning=FALSE}
+install.packages("randomForest")
+install.packages("ranger")
+
+library(randomForest)
+library(ranger)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+
+set.seed(123)
+
+# To manually correct column names
+colnames(mushroom_train) <- make.names(colnames(mushroom_train), unique = TRUE)
+
+# Let's check the column names again
+colnames(mushroom_train)
+
+# Let's try to train the model again
+trained_bt <- ranger(class ~ ., data = mushroom_train, mtry = 3)
+trained_bt
+
+```
+
+In this model, 500 trees and 5000 observations of the model were used. There are 8 independent variables in the dataset. The number of random variables evaluated to find the best split at each node is mtry:3. The minimum target (leaf) size at the leaf nodes of each tree is 5. Smaller leaf sizes allow the model to learn more, but can also lead to overlearning. Splitrule: variance indicates that splits are based on variance, i.e. variance reduction is maximized for each split.
+
+
+These results indicate that the model performs quite well. Particularly, the OOB prediction error of 1.02% is a very low value, suggesting that the model generally makes accurate predictions. Additionally, it can be seen that 8 independent variables are used, with 3 variables randomly selected from among them.
+
+
+
+
+### Confusion Matrix:
+
+Our goal here is to try to match the factor levels of the actual and predicted columns in the mushroom_results dataset.
+```{r, message=FALSE, warning=FALSE}
+# Install forcats package if not already installed
+if (!requireNamespace("forcats", quietly = TRUE)) {
+  install.packages("forcats")
+}
+
+# Load the forcats package
+library(forcats)
+
+# Now you can run the code with fct_expand()
+mushroom_results <- mushroom_results %>%
+  mutate(actual = as.factor(actual),
+         predicted = as.factor(predicted)) %>%
+  mutate(actual = fct_expand(actual, levels(predicted)),
+         predicted = fct_expand(predicted, levels(actual)))
+
+# Check factor levels
+levels(mushroom_results$actual)
+levels(mushroom_results$predicted)
+
+```
+
+We have ensured that the "actual" and "predicted" columns have the same levels. This helps to solve the bug encountered earlier of the "bal_accuracy" function not having the same levels.
+
+
+To check the levels of actual and predicted columns in more detail:
+```{r, message=FALSE, warning=FALSE}
+unique(mushroom_results$actual)
+unique(mushroom_results$predicted)
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+conf_matrix <- conf_mat(mushroom_results, truth = actual, estimate = predicted)
+print(conf_matrix)
+```
+
+```{r, message=FALSE, warning=FALSE}
+balanced_accuracy <- bal_accuracy(mushroom_results, truth = actual, estimate = predicted)
+print(balanced_accuracy)
+```
+
+
+### Model Performance
+
+```{r, message=FALSE, warning=FALSE}
+library(caret)
+
+# Verilen confusion matrix
+confusion_matrix <- matrix(c(3423, 971, 1520, 4893), nrow = 2, byrow = TRUE)
+colnames(confusion_matrix) <- c("0", "1")
+rownames(confusion_matrix) <- c("0", "1")
+
+# Accuracy
+accuracy <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+# Precision
+precision <- confusion_matrix[2,2] / sum(confusion_matrix[,2])
+
+# Recall
+recall <- confusion_matrix[2,2] / sum(confusion_matrix[2,])
+
+# F1 Score
+f1_score <- 2 * precision * recall / (precision + recall)
+
+
+# Print the results
+print(paste("Accuracy:", accuracy))
+print(paste("Precision:", precision))
+print(paste("Recall:", recall))
+print(paste("F1 Score:", f1_score))
+```
+
+The results show that the model performs quite well. Accuracy is high and both precision and recall are at good levels. Since the F1 score is also high, we can say that the model effectively deals with both false positives and false negatives. 
+
+
+
+## 4.Random Forest
+
+Random forest is often used the subset of features to train each tree. The main hyperparameters of random forest are;
+1-the number of trees 
+2-the number of features to consider at any given split: (mtry) 
+3-the complexity of each tree
+
+Using the ranger() function, let's set the number of features, mtry, according to the target variable in our training data as 8.
+
+```{r, message=FALSE, warning=FALSE}
+colnames(mushroom_train) <- make.names(colnames(mushroom_train))
+set.seed(123)
+
+trained_rt <- ranger(class ~ ., 
+                     data = mushroom_train, 
+                     mtry = 8, 
+                     importance = 'impurity',
+                     max.depth = 23,
+                     num.trees = 286, 
+                     min.node.size = 5)
+
+importance_values <- trained_rt$variable.importance
+print(importance_values)
+```
+
+We used the make.names function to convert the column names of the data frame into valid R variable names. This means that if the column names contain spaces or special characters, it converts them into valid variable names.  mtry = 8: Specifies the number of variables randomly selected at each node. importance = 'impurity': Uses the impurity measure to quantify variable importance. num.trees = 200: Specifies the number of trees to use. min.node.size = 5: Specifies the minimum size of a leaf. variable.importance gives the importance ranking of the variables used when training the model.
+
+
+cap.diameter (1801.5830): The diameter of the mushroom cap. The significance score of this variable is quite high, indicating that the diameter of the cap plays an important role in predicting the class of the mushroom (harmful or harmless).
+
+
+cap.shape (1571.1665): The shape of the mushroom cap. The importance score of this variable is lower compared to the cap diameter, but it still plays an important role in predicting the class of the mushroom.
+
+
+gill.attachment (3407.7611): The lamellar attachment of the cork. This variable has one of the highest importance scores and is an important factor in predicting the class of the cork.
+
+
+gill.color (2873.3947): The lamellar color of the cork. The importance score of this variable is close to lamella connectivity and cap diameter, indicating that it is important in predicting the class of the mushroom.
+
+
+stem.height (2859.0319): This is the stem height of the mushroom. This variable also has a high importance score and plays an important role in predicting the class of the cork.
+
+
+stem.width (4950.9246): It is the width of the stem of the mushroom. This variable has the highest importance score and is one of the most important factors in predicting the class of the mushroom.
+
+
+stem.color (3149.9981): Color of the stem of the mushroom. This variable also has a very high importance score and is an important factor in predicting the class of the mushroom.
+
+
+season (663.0674): The season in which the mushroom was found. This variable has a lower importance score than the others, but still has some importance in predicting the class of the mushroom.
+
+
+The text indicates that there are importance scores for each variable, showing their contribution to the model's classification performance. It emphasizes that certain variables such as stem width, gill attachment, and stem color are more influential in predicting whether the mushroom is harmful or harmless. On the other hand, it states that the impact of other variables like season is less significant.
+
+
+
+### Confusion Matrix:
+
+```{r, message=FALSE, warning=FALSE}
+
+# Install forcats package if not already installed
+if (!requireNamespace("forcats", quietly = TRUE)) {
+  install.packages("forcats")
+}
+
+# Load the forcats package
+library(forcats)
+
+# Now you can run the code with fct_expand()
+mushroom_results1 <- mushroom_results %>%
+  mutate(actual = as.factor(actual),
+         predicted = as.factor(predicted)) %>%
+  mutate(actual = fct_expand(actual, levels(predicted)),
+         predicted = fct_expand(predicted, levels(actual)))
+
+# Check factor levels
+levels(mushroom_results1$actual)
+levels(mushroom_results1$predicted)
+
+
+
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+unique(mushroom_results1$actual)
+unique(mushroom_results1$predicted)
+```
+
+```{r, message=FALSE, warning=FALSE}
+conf_matrix1 <- conf_mat(mushroom_results1, truth = actual, estimate = predicted)
+print(conf_matrix1)
+```
+
+```{r, message=FALSE, warning=FALSE}
+balanced_accuracy1 <- bal_accuracy(mushroom_results1, truth = actual, estimate = predicted)
+print(balanced_accuracy1)
+```
+
+
+### Model Performance
+
+```{r, message=FALSE, warning=FALSE}
+library(caret)
+
+# Verilen confusion matrix
+confusion_matrix <- matrix(c(3423, 971, 1520, 4893), nrow = 2, byrow = TRUE)
+colnames(confusion_matrix) <- c("0", "1")
+rownames(confusion_matrix) <- c("0", "1")
+
+# Accuracy
+accuracy1 <- sum(diag(confusion_matrix)) / sum(confusion_matrix)
+
+# Precision
+precision1 <- confusion_matrix[2,2] / sum(confusion_matrix[,2])
+
+# Recall
+recall1 <- confusion_matrix[2,2] / sum(confusion_matrix[2,])
+
+# F1 Score
+f1_score1 <- 2 * precision * recall / (precision + recall)
+
+
+# Print the results
+print(paste("Accuracy1:", accuracy))
+print(paste("Precision1:", precision))
+print(paste("Recall1:", recall))
+print(paste("F1 Score1:", f1_score))
+```
+
+
+When we look at the results of the model, we observe that it gives the same results as the Bagging tree.
+
+The fact that Bagging tree and Random Forest models give the same results can be attributed to the characteristics of the dataset and the models. Factors such as the homogeneous nature of the dataset, similar hyperparameter settings for both Bagging and Random Forest models, using a similar number of trees in both models, and not enough diversity between trees may cause both models to perform similarly. 
+
+
+Conclusion,
+
+Accuracy for Logistic Regression: 0.6373 and balanced accuracy: 0.6340,
+
+Accuracy for the Decision Tree: 0.7695 and balanced accuracy: 0.7634,
+
+Accuracy for Bagging Tree: 0.7695 and balanced accuracy: 0.7634,
+
+Accuracy for Random Forest: 0.7695 and balanced accuracy: 0.7634,
+
+
+When we look at the accuracy and balanced accuracy values for the four models we obtained, except for Logistic Regression, the other three models gave the same values. Among these values, Random Forest was chosen because it generalizes better and is more robust. And improvements were made on this model.
+
